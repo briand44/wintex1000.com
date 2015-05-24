@@ -174,23 +174,66 @@ function commerce_payment_rules_action_info() {
         ),
       ),
       'group' => t('Commerce Payment'),
-      'base' => $payment_method['base'],
       'callbacks' => array(
         'execute' => 'commerce_payment_enable_method',
       ),
     );
   }
 
-  $actions['commerce_payment_capture'] = array(
-    'label' => t('Capture from a prior authorization'),
+  $actions['commerce_payment_redirect_pane_previous_page'] = array(
+    'label' => t('Redirect the checkout to the previous pane'),
     'parameter' => array(
-      'commerce_order' => array('type' => 'commerce_order', 'label' => t('Order', array(), array('context' => 'a drupal commerce order'))),
-      'amount' => array('type' => 'text', 'label' => t('Amount')),
+      'commerce_order' => array(
+        'type' => 'commerce_order',
+        'label' => t('Order', array(), array(
+          'context' => 'a drupal commerce order',
+        )),
+        'skip save' => TRUE,
+      ),
     ),
     'group' => t('Commerce Payment'),
+    'callbacks' => array(
+      'execute' => 'commerce_payment_rules_redirect_pane_previous_page',
+    ),
+  );
+  $actions['commerce_payment_redirect_pane_next_page'] = array(
+    'label' => t('Redirect the checkout to the next pane'),
+    'parameter' => array(
+      'commerce_order' => array(
+        'type' => 'commerce_order',
+        'label' => t('Order', array(), array(
+          'context' => 'a drupal commerce order',
+        )),
+        'skip save' => TRUE,
+      ),
+    ),
+    'group' => t('Commerce Payment'),
+    'callbacks' => array(
+      'execute' => 'commerce_payment_rules_redirect_pane_next_page',
+    ),
   );
 
   return $actions;
+}
+
+/**
+ * Implements Rules action execution callback.
+ *
+ * @param stdClass $order
+ *   An order.
+ */
+function commerce_payment_rules_redirect_pane_previous_page($order) {
+  commerce_payment_redirect_pane_previous_page($order);
+}
+
+/**
+ * Implements Rules action execution callback.
+ *
+ * @param stdClass $order
+ *   An order.
+ */
+function commerce_payment_rules_redirect_pane_next_page($order) {
+  commerce_payment_redirect_pane_next_page($order);
 }
 
 /**
@@ -230,13 +273,6 @@ function commerce_payment_enable_method($order, $payment_method, $action_setting
     'rule_name' => $rule->name,
     'weight' => $rule->weight,
   );
-}
-
-/**
- * Rules action: capture a payment from a previous authorization.
- */
-function commerce_payment_capture($order, $amount) {
-
 }
 
 /**
