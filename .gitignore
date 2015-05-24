@@ -4,3 +4,7 @@ sites/*/*settings*.php
 # Ignore paths that contain generated content.
 sites/*/files
 sites/*/private
+
+# Ignore DS_Store
+.DS_Store
+*/.DS_Store
