@@ -1,0 +1,8 @@
+name = Custom Form Overrides
+description = Adding some custom contact form overrides.
+package = Custom
+core = 7.x
+
+files[] = form_overides.module
+
+version = "7.x-1.0" 

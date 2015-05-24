@@ -1,0 +1,13 @@
+<?php
+
+/**
+* Implements hook_entity_info_alter().
+*/
+function custom_view_modes_entity_info_alter(&$entity_info) {
+  $entity_info['node']['view modes']['views_stacked_teaser'] = array(
+    'label' => t('Views Stacked Teaser'),
+    'custom settings' => TRUE,
+  );
+} 
+
+?>

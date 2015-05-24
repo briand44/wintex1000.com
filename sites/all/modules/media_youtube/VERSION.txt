@@ -1,0 +1,6 @@
+Media YouTube Development Version
+Downloaded November 8, 2012
+
+
+Last commit:
+http://drupalcode.org/project/media_youtube.git/commit/825d80badfcaf97fa553f9b2ee0238495c033ea8

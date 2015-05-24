@@ -1,0 +1,26 @@
+diff --git a/less.module b/less.module
+index 4556e6f..8fb088e 100644
+--- a/less.module
++++ b/less.module
+@@ -64,7 +64,9 @@ function _less_pre_render($styles) {
+ 
+   // Flush compiled LESS files if developer mode is enabled
+   if (variable_get('less_devel', FALSE)) {
+-    file_unmanaged_delete_recursive($less_path);
++    if (file_exists($less_path)) {
++      file_unmanaged_delete_recursive($less_path);
++    }
+     if (user_access(LESS_PERMISSION) && flood_is_allowed('less_devel_warning', 1)) {
+       flood_register_event('less_devel_warning');
+       drupal_set_message(t('LESS files are being regenerated on every request. Remember to <a href="!url">turn off</a> this feature on production websites.', array("!url" => url('admin/config/development/less'))), 'status');
+@@ -151,7 +153,9 @@ function less_flush_caches() {
+   if (!drupal_static('less_cron')) {
+     // Delete all generated files.
+     $less_path = file_default_scheme() . '://less';
+-    file_unmanaged_delete_recursive($less_path);
++    if (file_exists($less_path)) {
++      file_unmanaged_delete_recursive($less_path);
++    }
+   }
+   return array();
+ }

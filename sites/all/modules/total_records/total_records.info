@@ -1,0 +1,5 @@
+name = Total Records
+description = Adds record count to view display.
+package = Custom
+version = VERSION
+core = 7.x

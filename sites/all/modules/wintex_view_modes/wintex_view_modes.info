@@ -1,0 +1,6 @@
+name = Wintex Custom View Modes
+description = Custom View Modes for Wintex
+core = 7.x
+
+files[] = "wintex_view_modes.module"
+

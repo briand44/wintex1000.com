@@ -1,0 +1,55 @@
+<?php
+/**
+*  Implementation of hook_form_FORMID_alter().
+*/
+
+function form_overrides_form_contact_site_form_alter(&$form, &$form_state, $form_id) {
+  // adjust weights
+  $form['name']['#weight'] = 0;
+  $form['mail']['#weight'] = 2;
+  $form['subject']['#weight'] = 6;
+  $form['message']['#weight'] = 8;
+  $form['copy']['#weight'] = 9;
+  $form['submit']['#weight'] = 10;
+
+  // add phone field
+  $form['phone'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Your Phone Number'),
+      '#maxlength' => 255,
+      '#default_value' => $edit['phone'],
+      '#required' => false,
+      '#weight' => 5,
+    );
+
+  // add company name field
+  $form['company'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Your Company Name'),
+      '#maxlength' => 255,
+      '#default_value' => $edit['phone'],
+      '#required' => false,
+      '#weight' => 4,
+    );
+}
+
+
+/**
+*  Implementation of hook_mail_alter().
+*/
+
+function form_overrides_mail_alter(&$message) {
+  if ($message['id'] == 'contact_page_mail') {
+    $phone = $message['params']['phone'];
+    $name = $message['params']['name'];
+    $company = $message['params']['company'];
+
+    $message['body'][3] = $message['body'][1];
+    $message['body'][2] = 'Company: ' . $company;
+    $message['body'][1] = 'Phone number of '.$name.': '.$phone;
+
+    $message['from'] = variable_get('site_mail', ini_get('sendmail_from'));
+	  $message['headers']['From'] = $message['from'];
+	  $message['params']['mail'] = $message['from'];
+  }
+}

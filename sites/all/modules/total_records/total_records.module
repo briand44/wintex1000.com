@@ -1,0 +1,7 @@
+<?php
+function total_records_views_pre_execute($view) {
+  if ($view->name == 'additional_parts') {
+    $view->get_total_rows = TRUE;
+  }
+}
+?>
