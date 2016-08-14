@@ -7,8 +7,8 @@
  * name will be "footheme_preprocess_hook". Tip - you can search/replace
  * on "footheme".
  */
- 
- 
+
+
 /**
  * Override or insert variables into the html templates.
  * Replace 'footheme' with your themes name, i.e. mytheme_preprocess_html()
@@ -52,6 +52,16 @@ function wintex_process_field(&$vars) {
   // Reduce number of images in teaser view mode to single image
   if ($element['#view_mode'] == 'node_teaser' && $element['#field_type'] == 'image') {
     $vars['items'] = array($vars['items'][0]);
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function wintex_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'commerce_checkout_form_checkout') {
+    $form['customer_profile_billing']['commerce_customer_address'][LANGUAGE_NONE][0]['organisation_block']['organisation_name']['#required'] = TRUE;
+    $form['customer_profile_shipping']['commerce_customer_address'][LANGUAGE_NONE][0]['organisation_block']['organisation_name']['#required'] = TRUE;
   }
 }
 
