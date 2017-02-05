@@ -11,11 +11,16 @@
  */
 class MediaEntityTranslationHandler extends EntityTranslationDefaultHandler {
 
+  /**
+   * Constructor function.
+   */
   public function __construct($entity_type, $entity_info, $entity) {
     parent::__construct('file', $entity_info, $entity);
   }
 
   /**
+   * Entity form handler.
+   *
    * @see EntityTranslationDefaultHandler::entityForm()
    */
   public function entityForm(&$form, &$form_state) {
@@ -23,6 +28,11 @@ class MediaEntityTranslationHandler extends EntityTranslationDefaultHandler {
 
     if (isset($form['actions']['delete_translation'])) {
       $form['actions']['delete_translation']['#weight'] = 10;
+    }
+
+    // The "Source language" element is unsupported on modal forms.
+    if (!empty($form_state['ajax'])) {
+      $form['source_language']['#access'] = FALSE;
     }
 
     if ($this->getPathScheme() == 'media') {
