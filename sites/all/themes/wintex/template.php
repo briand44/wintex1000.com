@@ -44,6 +44,11 @@ function wintex_preprocess_html(&$vars) {
   load_subtheme_ie_styles($ie_files, 'footheme'); // Replace 'footheme' with your themes name
   // */
 
+  // Add font awesome cdn.
+  drupal_add_css('//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css', array(
+      'type' => 'external'
+    ));
+
 }
 
 function wintex_process_field(&$vars) {
