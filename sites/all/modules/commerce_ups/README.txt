@@ -17,15 +17,17 @@ of each product. This information is necessary to determine a shipping estimate.
 * Commerce Shipping - http://www.drupal.org/project/commerce_shipping
 This provides the infrastructure for Commerce UPS to fully integrate with the 
 Commerce module.
-You must use the commerce_shiping 2.x!
+You must use the commerce_shipping 2.x!
 
 
 - - - - - Optional modules
 
-* AES - http://www.drupal.org/project/aes
+* Real AES - http://www.drupal.org/project/real_aes
 This module is strongly suggested in order to securely store the site's 
-UPS credentials. 
-
+UPS credentials.
+* DO NOT use the AES Encryption (https://www.drupal.org/project/aes) module -
+it is not secure. The Real AES module includes a drop-in replacement
+"AES" module that provides the necessary API compatibility.
 
 - - - - - Installation
 
@@ -45,10 +47,27 @@ than the "Shipping information" pane. (admin/commerce/config/checkout)
 You'll need to create UPS account and obtain an access key 
 via https://www.ups.com/upsdeveloperkit. 
 
-4. Optionally install and configure the AES encryption module 
-(http://www.drupal.org/project/aes). This will help keep your UPS 
-credentials secure.
+4. Optionally install and configure the Real AES module
+(http://www.drupal.org/project/real_aes) and its included "AES" submodule - as
+well as the php-encryption library (see the Real AES module README file).
+This will help keep your UPS credentials secure. Be sure to add a $conf variable
+to your settings.php pointing to your AES keyfile:
+$conf['real_aes_key_file'] = '/path/to/aes.key';
 
+- - - - - Upgrading from AES to Real AES
+
+1. Make sure you have your UPS credentials before you being, as you'll need
+to re-enter them at the end of this process.
+
+2. Disable, uninstall, and remove from the codebase for the AES module.
+
+3. Install the "Real AES" module. Be sure to read the Real AES module README
+file, as it contains instructions on installing the necessary php-encryption
+library.
+
+4. Update your AES key (again, see the Real AES module README).
+
+5. Re-enter your UPS credentials on the UPS settings page.
 
 - - - - - Limitations
 
@@ -74,7 +93,10 @@ lead that weighs 600lbs, this module will let you (instead of breaking the
 order into more packages).
 
 6. Doesn't account for packing material. If you need to account for packing 
-material, then you may want to adjust product dimensions accordingly.
+material, then you may want to adjust product dimensions accordingly.  
+
+7. Doesn't include support for shipping markups. If you'd like to add a shipping 
+markup, use Rules Components.
 
 
 - - - - - Methodology

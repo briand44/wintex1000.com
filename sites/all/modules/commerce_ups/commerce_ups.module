@@ -5,18 +5,17 @@
  * Handles main functionality for Commerce UPS module.
  */
 
-require 'commerce_ups.xml.inc';
-
+/**
+ * Implements hook_menu().
+ */
 function commerce_ups_menu() {
-  $items = array();
-
   $items['admin/commerce/config/shipping/methods/ups/edit'] = array(
     'title' => 'Edit',
     'description' => 'Configure the UPS shipping method.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('commerce_ups_settings_form'),
     'access arguments' => array('administer shipping'),
-    'file' => 'commerce_ups.admin.inc',
+    'file' => 'includes/commerce_ups.admin.inc',
     'type' => MENU_LOCAL_TASK,
     'context' => MENU_CONTEXT_INLINE,
     'weight' => 0,
@@ -29,8 +28,6 @@ function commerce_ups_menu() {
  * Implements hook_commerce_shipping_method_info().
  */
 function commerce_ups_commerce_shipping_method_info() {
-  $shipping_methods = array();
-
   $shipping_methods['ups'] = array(
     'title' => t('UPS'),
     'description' => t('Quote rates from UPS'),
@@ -49,7 +46,8 @@ function commerce_ups_commerce_shipping_service_info() {
   $selected_services = variable_get('commerce_ups_services', array());
 
   foreach ($selected_services as $id => $val) {
-    if ($val != 0) { // if you find a selected one...
+    // If you find a selected one...
+    if ($val != 0) {
       $service = $available_services[$id];
       $shipping_services[$service['slug']] = array(
         'title' => t($service['title']),
@@ -59,7 +57,7 @@ function commerce_ups_commerce_shipping_service_info() {
         'price_component' => 'shipping',
         'callbacks' => array(
           'rate' => 'commerce_ups_service_rate_order',
-        )
+        ),
       );
     }
   }
@@ -74,8 +72,9 @@ function commerce_ups_service_rate_order($shipping_service, $order) {
   // First attempt to recover cached shipping rates for the current order.
   $rates = commerce_shipping_rates_cache_get('ups', $order, variable_get('commerce_ups_rates_timeout', 0));
   // If no rates were recovered from the cache or the cached rates are over one minute old...
-  if (!$rates) {
+  if (!is_array($rates)) {
     $rates = array();
+    module_load_include('inc', 'commerce_ups', 'includes/commerce_ups.xml');
 
     // Build the rate request for the current order. This returns XML.
     $rate_request_xml = commerce_ups_build_rate_request($order);
@@ -83,15 +82,21 @@ function commerce_ups_service_rate_order($shipping_service, $order) {
     // If we got a valid rate request object back...
     if ($rate_request_xml) {
       // Submit the API request to UPS.
-      $response = commerce_ups_api_request($rate_request_xml, t('Requesting shipping rates for Order @order_number', array('@order_number' => $order->order_number)));
+      $response = commerce_ups_api_request('Rate', $rate_request_xml, t('Requesting shipping rates for Order @order_number', array('@order_number' => $order->order_number)));
 
       if (!empty($response)) {
         // Parse the response to cache all requested rates for the current order.
         foreach ($response->RatedShipment as $rate) {
           // Extract the service name and price information from the rate object.
           $service_name = commerce_ups_commerce_shipping_service_name((string) $rate->Service->Code);
-          $decimal = (string) $rate->TotalCharges->MonetaryValue;
-          $currency_code = (string) $rate->TotalCharges->CurrencyCode;
+          if ($rate->NegotiatedRates) {
+            $decimal = (string) $rate->NegotiatedRates->NetSummaryCharges->GrandTotal->MonetaryValue;
+            $currency_code = (string) $rate->NegotiatedRates->NetSummaryCharges->GrandTotal->CurrencyCode;
+          }
+          else {
+            $decimal = (string) $rate->TotalCharges->MonetaryValue;
+            $currency_code = (string) $rate->TotalCharges->CurrencyCode;
+          }
 
           // Add an item to the rates array for the current service.
           $rates[$service_name] = array(
@@ -106,6 +111,9 @@ function commerce_ups_service_rate_order($shipping_service, $order) {
     }
   }
 
+  // Allow other modules to alter the returned rates.
+  drupal_alter('commerce_ups_service_rate_order', $rates, $order);
+
   // Return the rate for the requested service or FALSE if not found.
   return isset($rates[$shipping_service['name']]) ? $rates[$shipping_service['name']] : FALSE;
 }
@@ -113,7 +121,7 @@ function commerce_ups_service_rate_order($shipping_service, $order) {
 /**
  * Implements hook_commerce_shipping_service_rate_options_alter().
  */
-function commerce_ups_commerce_shipping_service_rate_options_alter(&$options, $order) {
+function commerce_ups_commerce_shipping_service_rate_options_alter(& $options, $order) {
   // If the display UPS logo next to UPS services is enabled in settings,
   // loop through the shipping options and add the UPS logo to UPS services.
   if (variable_get('commerce_ups_show_logo', FALSE)) {
@@ -132,28 +140,73 @@ function commerce_ups_commerce_shipping_service_rate_options_alter(&$options, $o
  * Convenience function to get UPS codes for their services.
  */
 function _commerce_ups_service_list() {
-  $services =  array(
-    // Domestic services
-    '03' => array('title' => t('UPS Ground'), 'description' => t('Ground Delivery')),
-    '01' => array('title' => t('UPS Next Day Air'), 'description' => t('Next Day Air')),
-    '13' => array('title' => t('UPS Next Day Air Saver'), 'description' => t('Next Day Air Saver')),
-    '14' => array('title' => t('UPS Next Day Early A.M.'), 'description' => t('Next Day Early A.M.')),
-    '02' => array('title' => t('UPS 2nd Day Air'), 'description' => t('2nd Day Air')),
-    '59' => array('title' => t('UPS 2nd Day Air A.M.'), 'description' => t('2nd Day Air A.M.')),
-    '12' => array('title' => t('UPS 3 Day Select'), 'description' => t('3 Day Select')),
-    // International services
-    '11' => array('title' => t('UPS Standard'), 'description' => t('International Standard')),
-    '07' => array('title' => t('UPS Worldwide Express'), 'description' => t('Worldwide Express')),
-    '08' => array('title' => t('UPS Worldwide Expedited'), 'description' => t('Worldwide Expedited')),
-    '54' => array('title' => t('UPS Worldwide Express Plus'), 'description' => t('Worldwide Express Plus')),
-    '65' => array('title' => t('UPS Worldwide Saver'), 'description' => t('Worldwide Saver'))
+  $services = array(
+    // Domestic services.
+    '03' => array(
+      'title' => t('UPS Ground'),
+      'description' => t('Ground Delivery'),
+      'slug' => 'ups_ground',
+    ),
+    '01' => array(
+      'title' => t('UPS Next Day Air'),
+      'description' => t('Next Day Air'),
+      'slug' => 'ups_next_day_air',
+    ),
+    '13' => array(
+      'title' => t('UPS Next Day Air Saver'),
+      'description' => t('Next Day Air Saver'),
+      'slug' => 'ups_next_day_air_saver',
+    ),
+    '14' => array(
+      'title' => t('UPS Next Day Early A.M.'),
+      'description' => t('Next Day Early A.M.'),
+      'slug' => 'ups_next_day_early_a.m.',
+    ),
+    '02' => array(
+      'title' => t('UPS 2nd Day Air'),
+      'description' => t('2nd Day Air'),
+      'slug' => 'ups_2nd_day_air',
+    ),
+    '59' => array(
+      'title' => t('UPS 2nd Day Air A.M.'),
+      'description' => t('2nd Day Air A.M.'),
+      'slug' => 'ups_2nd_day_air_a.m.',
+    ),
+    '12' => array(
+      'title' => t('UPS 3 Day Select'),
+      'description' => t('3 Day Select'),
+      'slug' => 'ups_3_day_select.',
+    ),
+    // International services.
+    '11' => array(
+      'title' => t('UPS Standard'),
+      'description' => t('International Standard'),
+      'slug' => 'ups_standard',
+    ),
+    '07' => array(
+      'title' => t('UPS Worldwide Express'),
+      'description' => t('Worldwide Express'),
+      'slug' => 'ups_worldwide_express',
+    ),
+    '08' => array(
+      'title' => t('UPS Worldwide Expedited'),
+      'description' => t('Worldwide Expedited'),
+      'slug' => 'ups_worldwide_expedited',
+    ),
+    '54' => array(
+      'title' => t('UPS Worldwide Express Plus'),
+      'description' => t('Worldwide Express Plus'),
+      'slug' => 'ups_worldwide_express_plus',
+    ),
+    '65' => array(
+      'title' => t('UPS Worldwide Saver'),
+      'description' => t('Worldwide Saver'),
+      'slug' => 'ups_worldwide_saver',
+    ),
   );
 
-  /* Make a unique ID to identify the service by */
-  foreach ($services as $key => $service) {
-    $service['slug'] = str_replace(' ', '_', drupal_strtolower($service['title']));
-    $services[$key] = $service;
-  }
+  drupal_alter('commerce_ups_service_list', $services);
+
   return $services;
 }
 
@@ -162,7 +215,7 @@ function _commerce_ups_service_list() {
  */
 function _commerce_ups_packaging_types() {
   return array(
-    // Customer Supplied Page is first so it will be the default
+    // Customer Supplied Page is first so it will be the default.
     '02' => t('Customer Supplied Package'),
     '01' => t('UPS Letter'),
     '03' => t('Tube'),
@@ -177,6 +230,9 @@ function _commerce_ups_packaging_types() {
   );
 }
 
+/**
+ * Types of pickup for UPS.
+ */
 function _commerce_ups_pickup_types() {
   return array(
     '06' => 'One Time Pickup',
@@ -184,11 +240,13 @@ function _commerce_ups_pickup_types() {
     '03' => 'Customer Counter',
     '07' => 'On Call Air',
     '19' => 'Letter Center',
-    '20' => 'Air Service Center'
+    '20' => 'Air Service Center',
   );
 }
 
-
+/**
+ * List of Shipping Service.
+ */
 function commerce_ups_commerce_shipping_service_name($service_code) {
   $service_names = _commerce_ups_service_list();
   return $service_names[$service_code]['slug'];
@@ -198,29 +256,44 @@ function commerce_ups_commerce_shipping_service_name($service_code) {
  * Encrypt a specified value.
  */
 function commerce_ups_encrypt($value) {
-  return aes_encrypt($value);
+  if (module_exists('aes')) {
+    return aes_encrypt($value);
+  }
+  return encrypt($value);
 }
 
 /**
- * Decrypt all api variables in one function call. 
+ * Decrypt all api variables in one function call.
  */
 function commerce_ups_decrypt_vars($include_password) {
   $user_vars = array();
-  $encrypted = variable_get('commerce_ups_encrypt', FALSE) && function_exists('aes_decrypt');
-  $user_vars['ups_accountid'] = variable_get('commerce_ups_account_id', '');
-  $user_vars['ups_userid'] = variable_get('commerce_ups_user_id', '');
-  $user_vars['ups_accesskey'] = variable_get('commerce_ups_access_key', '');
-  if ($include_password) {
-    $user_vars['ups_password'] = variable_get('commerce_ups_password', '');
-  }
-  if ($encrypted) {
-    $user_vars['ups_accountid'] = aes_decrypt($user_vars['ups_accountid']);
-    $user_vars['ups_userid'] = aes_decrypt($user_vars['ups_userid']);
-    $user_vars['ups_accesskey'] = aes_decrypt($user_vars['ups_accesskey']);
-    if ($include_password) {
-      $user_vars['ups_password'] = aes_decrypt($user_vars['ups_password']);
+  if (variable_get('commerce_ups_encrypt', FALSE) && commerce_ups_encryption_available()) {
+    if (module_exists('aes')) {
+      $user_vars['ups_accountid'] = aes_decrypt(variable_get('commerce_ups_account_id', ''));
+      $user_vars['ups_userid'] = aes_decrypt(variable_get('commerce_ups_user_id', ''));
+      $user_vars['ups_accesskey'] = aes_decrypt(variable_get('commerce_ups_access_key', ''));
+      if ($include_password) {
+        $user_vars['ups_password'] = variable_get('commerce_ups_password', '');
+      }
+    }
+    else {
+      $user_vars['ups_accountid'] = decrypt(variable_get('commerce_ups_account_id', ''));
+      $user_vars['ups_userid'] = decrypt(variable_get('commerce_ups_user_id', ''));
+      $user_vars['ups_accesskey'] = decrypt(variable_get('commerce_ups_access_key', ''));
+      if ($include_password) {
+        $user_vars['ups_password'] = decrypt(variable_get('commerce_ups_password', ''));
+      }
     }
   }
+  else {
+    $user_vars['ups_accountid'] = variable_get('commerce_ups_account_id', '');
+    $user_vars['ups_userid'] = variable_get('commerce_ups_user_id', '');
+    $user_vars['ups_accesskey'] = variable_get('commerce_ups_access_key', '');
+    if ($include_password) {
+      $user_vars['ups_password'] = variable_get('commerce_ups_password', '');
+    }
+  }
+
   return $user_vars;
 }
 
@@ -228,47 +301,39 @@ function commerce_ups_decrypt_vars($include_password) {
  * Check whether encryption is available.
  */
 function commerce_ups_encryption_available($options = array()) {
-  $defaults = array(
-    'check_config' => TRUE,
-    'display_errors' => FALSE,
-    'display_warnings' => FALSE,
-    'display_all' => FALSE,
-    'fail_threshold' => 'warnings',
+  // The old (insecure) AES module exists.
+  if (module_exists('aes')) {
+    return TRUE;
+  }
+  // Real AES is installed, but not the AES compatibility module.
+  elseif (module_exists('real_aes')) {
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * Defines the available endpoints for the UPS XML API.
+ */
+function commerce_ups_api_endpoint($method) {
+  $endpoints = array(
+    'Rate'        => 'https://onlinetools.ups.com/ups.app/xml/Rate',
+    'ShipConfirm' => 'https://onlinetools.ups.com/ups.app/xml/ShipConfirm',
+    'ShipAccept'  => 'https://onlinetools.ups.com/ups.app/xml/ShipAccept',
+
+    // Test URLs
+    'RateTest'        => 'https://wwwcie.ups.com/ups.app/xml/Rate',
+    'ShipConfirmTest' => 'https://wwwcie.ups.com/ups.app/xml/ShipConfirm',
+    'ShipAcceptTest'  => 'https://wwwcie.ups.com/ups.app/xml/ShipAccept',
   );
-  $options = array_merge($defaults, $options);
-  extract($options);
-  $errors = array();
-  $warnings = array();
 
-  if (!module_exists('aes')) {
-    $errors[] = 'AES Encryption module is not installed.';
-  }
-  elseif ($check_config) {
-    if (!variable_get('aes_key_path', FALSE) || variable_get('aes_key_storage_method', FALSE) != 'File') {
-      $warnings[] = 'AES Encryption is installed but not configured securely. Please go ' . l('configure AES Encryption to use file storage', 'admin/settings/aes') . ' to enable encryption for UPS credentials.';
-    }
+  // Allow other modules to alter the API endpoints.
+  drupal_alter('commerce_ups_api_endpoint', $endpoints, $method);
+
+  if (!empty($endpoints[$method])) {
+    return $endpoints[$method];
   }
 
-  if ($display_errors || $display_all) {
-    foreach ($errors as $msg) {
-      drupal_set_message(filter_xss(t($msg)), 'error', FALSE);
-    }
-  }
-
-  if ($display_warnings || $display_all) {
-    foreach ($warnings as $msg) {
-      drupal_set_message(filter_xss(t($msg)), 'warning', FALSE);
-    }
-  }
-
-  switch ($fail_threshold) {
-    case 'errors':
-      if (empty($errors)) {
-        return TRUE;
-      }
-  case 'warnings':
-    if (empty($errors) && empty($warnings)) {
-      return TRUE;
-    }
-  }
+  return FALSE;
 }

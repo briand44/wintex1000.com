@@ -32,9 +32,36 @@ function commerce_ups_uninstall() {
     'commerce_ups_rates_timeout',
     'commerce_ups_shipto_residential',
     'commerce_ups_log',
+    'commerce_ups_negotiated_rates',
   );
 
   foreach ($fields as $data) {
     variable_del($data);
   }
+}
+
+function commerce_ups_requirements($phase) {
+  $requirements = array();
+
+  // Ensure translations don't break during installation.
+  $t = get_t();
+
+  // The old (insecure) AES module is still being used.
+  if (module_exists('aes') && !module_exists('real_aes')) {
+    $requirements['commerce_ups_encrypt_credentials'] = array(
+      'title' => $t('Commerce UPS'),
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t('The AES Encryption module is obsolete and no longer secure, therefore your UPS credentials are not secure. Please see the the Commerce UPS README for instructions on upgrading to the Real AES module.'),
+    );
+  }
+  // Real AES is not installed.
+  elseif (!module_exists('real_aes')) {
+    $requirements['commerce_ups_encrypt_credentials'] = array(
+      'title' => $t('Commerce UPS'),
+      'severity' => REQUIREMENT_WARNING,
+      'description' => $t('Real AES module is not installed, therefore your UPS credentials will not be encrypted.'),
+    );
+  }
+
+  return $requirements;
 }
