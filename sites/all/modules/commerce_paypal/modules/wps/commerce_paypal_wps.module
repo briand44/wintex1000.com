@@ -295,9 +295,13 @@ function commerce_paypal_wps_paypal_ipn_process($order, $payment_method, &$ipn) 
     $transaction->instance_id = $payment_method['instance_id'];
   }
 
+  $wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $order_currency_code = $wrapper->commerce_order_total->currency_code->value();
+  $amount = commerce_currency_decimal_to_amount($ipn['mc_gross'], $ipn['mc_currency']);
+  $transaction->amount = commerce_currency_convert($amount, $ipn['mc_currency'], $order_currency_code);
+  $transaction->currency_code = $order_currency_code;
+
   $transaction->remote_id = $ipn['txn_id'];
-  $transaction->amount = commerce_currency_decimal_to_amount($ipn['mc_gross'], $ipn['mc_currency']);
-  $transaction->currency_code = $ipn['mc_currency'];
   $transaction->payload[REQUEST_TIME . '-ipn'] = $ipn;
 
   // Set the transaction's statuses based on the IPN's payment_status.
@@ -350,10 +354,15 @@ function commerce_paypal_wps_paypal_ipn_process($order, $payment_method, &$ipn) 
         // Create the new profile now.
         $profile = commerce_customer_profile_new('billing', $order->uid);
 
+        // Prepare an addressfield array to set to the customer profile.
+        $field = field_info_field('commerce_customer_address');
+        $instance = field_info_instance('commerce_customer_profile', 'commerce_customer_address', 'billing');
+        $address = addressfield_default_values($field, $instance);
+
         // Add the address value.
         $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
 
-        $profile_wrapper->commerce_customer_address = array_merge(addressfield_default_values(), array(
+        $profile_wrapper->commerce_customer_address = array_merge($address, array(
           'country' => $ipn['residence_country'],
           'name_line' => $ipn['first_name'] . ' ' . $ipn['last_name'],
           'first_name' => $ipn['first_name'],
@@ -414,6 +423,11 @@ function commerce_paypal_wps_order_form($form, &$form_state, $order, $settings) 
   // Ensure a default value for the payment_method setting.
   $settings += array('payment_method' => '');
 
+  $line_item_types = array();
+  if (function_exists('commerce_product_line_item_types')) {
+    $line_item_types = commerce_product_line_item_types();
+  }
+
   // Build the data array that will be translated into hidden form values.
   $data = array(
     // Specify the checkout experience to present to the user.
@@ -459,12 +473,34 @@ function commerce_paypal_wps_order_form($form, &$form_state, $order, $settings) 
     // Use the timestamp to generate a unique invoice number
     'invoice' => commerce_paypal_ipn_invoice($order),
 
-    // Define a single item in the cart representing the whole order
+    // Provide a default email for non-PayPal users.
+    'email' => substr($order->mail, 0, 127),
+
+    // Define a single item in the cart representing the whole order.
     'amount_1' => commerce_paypal_price_amount(commerce_currency_convert($amount, $order_currency_code, $currency_code), $currency_code),
-    'item_name_1' => t('Order @order_number at @store', array('@order_number' => $order->order_number, '@store' => variable_get('site_name', url('<front>', array('absolute' => TRUE))))),
+    'item_name_1' => t('Order @order_number at @store', array(
+      '@order_number' => $order->order_number,
+      '@store' => variable_get('site_name',
+        url('<front>', array('absolute' => TRUE))),
+    )),
     'on0_1' => t('Product count'),
-    'os0_1' => commerce_line_items_quantity($wrapper->commerce_line_items, commerce_product_line_item_types()),
+    'os0_1' => commerce_line_items_quantity($wrapper->commerce_line_items, $line_item_types),
   );
+
+  // If a billing address is available, pass it to PayPal to populate
+  // field values for non-PayPal users paying with their card.
+  if (!empty($wrapper->commerce_customer_billing->commerce_customer_address)) {
+    // Assign billing address fields to hidden form values.
+    $billing_address = $wrapper->commerce_customer_billing->commerce_customer_address->value();
+    $data['address1'] = substr($billing_address['thoroughfare'], 0, 100);
+    $data['address2'] = substr($billing_address['premise'], 0, 100);
+    $data['city'] = substr($billing_address['locality'], 0, 40);
+    $data['state'] = $billing_address['administrative_area'];
+    $data['zip'] = substr($billing_address['postal_code'], 0, 32);
+    $data['country'] = $billing_address['country'];
+    $data['first_name'] = drupal_substr($billing_address['first_name'], 0, 32);
+    $data['last_name'] = drupal_substr($billing_address['last_name'], 0, 32);
+  }
 
   // Allow modules to alter parameters of the API request.
   drupal_alter('commerce_paypal_wps_order_form_data', $data, $order);
@@ -472,7 +508,7 @@ function commerce_paypal_wps_order_form($form, &$form_state, $order, $settings) 
   $form['#action'] = commerce_paypal_wps_server_url($settings['server']);
 
   foreach ($data as $name => $value) {
-    if (!empty($value)) {
+    if (isset($value)) {
       $form[$name] = array('#type' => 'hidden', '#value' => $value);
     }
   }
@@ -509,26 +545,213 @@ function commerce_paypal_wps_server_url($server) {
 function commerce_paypal_wps_languages() {
   return array(
     t('By country') => array(
+      'AL' => t('Albania'),
+      'DZ' => t('Algeria'),
+      'AD' => t('Andorra'),
+      'AO' => t('Angola'),
+      'AI' => t('Anguilla'),
+      'AG' => t('Antigua and Barbuda'),
+      'AR' => t('Argentina'),
+      'AM' => t('Armenia'),
+      'AW' => t('Aruba'),
       'AU' => t('Australia'),
       'AT' => t('Austria'),
+      'AZ' => t('Azerbaijan Republic'),
+      'BS' => t('Bahamas'),
+      'BH' => t('Bahrain'),
+      'BB' => t('Barbados'),
+      'BY' => t('Belarus'),
       'BE' => t('Belgium'),
+      'BZ' => t('Belize'),
+      'BJ' => t('Benin'),
+      'BM' => t('Bermuda'),
+      'BT' => t('Bhutan'),
+      'BO' => t('Bolivia'),
+      'BA' => t('Bosnia and Herzegovina'),
+      'BW' => t('Botswana'),
       'BR' => t('Brazil'),
+      'BN' => t('Brunei'),
+      'BG' => t('Bulgaria'),
+      'BF' => t('Burkina Faso'),
+      'BI' => t('Burundi'),
+      'KH' => t('Cambodia'),
+      'CM' => t('Cameroon'),
       'CA' => t('Canada'),
-      'CN' => t('China'),
+      'CV' => t('Cape Verde'),
+      'KY' => t('Cayman Islands'),
+      'TD' => t('Chad'),
+      'CL' => t('Chile'),
+      'C2' => t('China'),
+      'CO' => t('Colombia'),
+      'KM' => t('Comoros'),
+      'CK' => t('Cook Islands'),
+      'CR' => t('Costa Rica'),
+      'CI' => t('Cote D\'Ivoire'),
+      'HR' => t('Croatia'),
+      'CY' => t('Cyprus'),
+      'CZ' => t('Czech Republic'),
+      'CD' => t('Democratic Republic of the Congo'),
+      'DK' => t('Denmark'),
+      'DJ' => t('Djibouti'),
+      'DM' => t('Dominica'),
+      'DO' => t('Dominican Republic'),
+      'EC' => t('Ecuador'),
+      'EG' => t('Egypt'),
+      'SV' => t('El Salvador'),
+      'ER' => t('Eritrea'),
+      'EE' => t('Estonia'),
+      'ET' => t('Ethiopia'),
+      'FK' => t('Falkland Islands'),
+      'FO' => t('Faroe Islands'),
+      'FJ' => t('Fiji'),
+      'FI' => t('Finland'),
       'FR' => t('France'),
+      'GF' => t('French Guiana'),
+      'PF' => t('French Polynesia'),
+      'GA' => t('Gabon Republic'),
+      'GM' => t('Gambia'),
+      'GE' => t('Georgia'),
       'DE' => t('Germany'),
+      'GI' => t('Gibraltar'),
+      'GR' => t('Greece'),
+      'GL' => t('Greenland'),
+      'GD' => t('Grenada'),
+      'GP' => t('Guadeloupe'),
+      'GT' => t('Guatemala'),
+      'GN' => t('Guinea'),
+      'GW' => t('Guinea Bissau'),
+      'GY' => t('Guyana'),
+      'HN' => t('Honduras'),
+      'HK' => t('Hong Kong'),
+      'HU' => t('Hungary'),
+      'IS' => t('Iceland'),
+      'IN' => t('India'),
+      'ID' => t('Indonesia'),
+      'IE' => t('Ireland'),
+      'IL' => t('Israel'),
       'IT' => t('Italy'),
+      'JM' => t('Jamaica'),
+      'JP' => t('Japan'),
+      'JO' => t('Jordan'),
+      'KZ' => t('Kazakhstan'),
+      'KE' => t('Kenya'),
+      'KI' => t('Kiribati'),
+      'KW' => t('Kuwait'),
+      'KG' => t('Kyrgyzstan'),
+      'LA' => t('Laos'),
+      'LV' => t('Latvia'),
+      'LS' => t('Lesotho'),
+      'LI' => t('Liechtenstein'),
+      'LT' => t('Lithuania'),
+      'LU' => t('Luxembourg'),
+      'MK' => t('Macedonia'),
+      'MG' => t('Madagascar'),
+      'MW' => t('Malawi'),
+      'MY' => t('Malaysia'),
+      'MV' => t('Maldives'),
+      'ML' => t('Mali'),
+      'MT' => t('Malta'),
+      'MH' => t('Marshall Islands'),
+      'MQ' => t('Martinique'),
+      'MR' => t('Mauritania'),
+      'MU' => t('Mauritius'),
+      'YT' => t('Mayotte'),
+      'MX' => t('Mexico'),
+      'FM' => t('Micronesia'),
+      'MD' => t('Moldova'),
+      'MC' => t('Monaco'),
+      'MN' => t('Mongolia'),
+      'ME' => t('Montenegro'),
+      'MS' => t('Montserrat'),
+      'MA' => t('Morocco'),
+      'MZ' => t('Mozambique'),
+      'NA' => t('Namibia'),
+      'NR' => t('Nauru'),
+      'NP' => t('Nepal'),
       'NL' => t('Netherlands'),
+      'AN' => t('Netherlands Antilles'),
+      'NC' => t('New Caledonia'),
+      'NZ' => t('New Zealand'),
+      'NI' => t('Nicaragua'),
+      'NE' => t('Niger'),
+      'NG' => t('Nigeria'),
+      'NU' => t('Niue'),
+      'NF' => t('Norfolk Island'),
+      'NO' => t('Norway'),
+      'OM' => t('Oman'),
+      'PW' => t('Palau'),
+      'PA' => t('Panama'),
+      'PG' => t('Papua New Guinea'),
+      'PY' => t('Paraguay'),
+      'PE' => t('Peru'),
+      'PH' => t('Philippines'),
+      'PN' => t('Pitcairn Islands'),
       'PL' => t('Poland'),
       'PT' => t('Portugal'),
+      'QA' => t('Qatar'),
+      'CG' => t('Republic of the Congo'),
+      'RE' => t('Reunion'),
+      'RO' => t('Romania'),
       'RU' => t('Russia'),
+      'RW' => t('Rwanda'),
+      'KN' => t('Saint Kitts and Nevis Anguilla'),
+      'PM' => t('Saint Pierre and Miquelon'),
+      'VC' => t('Saint Vincent and Grenadines'),
+      'WS' => t('Samoa'),
+      'SM' => t('San Marino'),
+      'ST' => t('São Tomé and Príncipe'),
+      'SA' => t('Saudi Arabia'),
+      'SN' => t('Senegal'),
+      'RS' => t('Serbia'),
+      'SC' => t('Seychelles'),
+      'SL' => t('Sierra Leone'),
+      'SG' => t('Singapore'),
+      'SK' => t('Slovakia'),
+      'SI' => t('Slovenia'),
+      'SB' => t('Solomon Islands'),
+      'SO' => t('Somalia'),
+      'ZA' => t('South Africa'),
+      'KR' => t('South Korea'),
       'ES' => t('Spain'),
+      'LK' => t('Sri Lanka'),
+      'SH' => t('St. Helena'),
+      'LC' => t('St. Lucia'),
+      'SR' => t('Suriname'),
+      'SJ' => t('Svalbard and Jan Mayen Islands'),
+      'SZ' => t('Swaziland'),
+      'SE' => t('Sweden'),
       'CH' => t('Switzerland'),
+      'TW' => t('Taiwan'),
+      'TJ' => t('Tajikistan'),
+      'TZ' => t('Tanzania'),
+      'TH' => t('Thailand'),
+      'TG' => t('Togo'),
+      'TO' => t('Tonga'),
+      'TT' => t('Trinidad and Tobago'),
+      'TN' => t('Tunisia'),
+      'TR' => t('Turkey'),
+      'TM' => t('Turkmenistan'),
+      'TC' => t('Turks and Caicos Islands'),
+      'TV' => t('Tuvalu'),
+      'UG' => t('Uganda'),
+      'UA' => t('Ukraine'),
+      'AE' => t('United Arab Emirates'),
       'GB' => t('United Kingdom'),
       'US' => t('United States'),
+      'UY' => t('Uruguay'),
+      'VU' => t('Vanuatu'),
+      'VA' => t('Vatican City State'),
+      'VE' => t('Venezuela'),
+      'VN' => t('Vietnam'),
+      'VG' => t('Virgin Islands (British)'),
+      'WF' => t('Wallis and Futuna Islands'),
+      'YE' => t('Yemen'),
+      'ZM' => t('Zambia'),
+      'ZW' => t('Zimbabwe'),
     ),
     t('By language') => array(
       'da_DK' => t('Danish (for Denmark only)'),
+      'fr_CA' => t('French (for Canada only)'),
       'he_IL' => t('Hebrew (for all)'),
       'id_ID' => t('Indonesian (for Indonesia only)'),
       'jp_JP' => t('Japanese (for Japan only)'),
