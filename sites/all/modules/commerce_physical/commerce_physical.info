@@ -8,9 +8,9 @@ dependencies[] = commerce_product_reference
 dependencies[] = physical
 core = 7.x
 
-; Information added by drupal.org packaging script on 2011-10-23
+; Information added by Drupal.org packaging script on 2016-10-22
 version = "7.x-1.x-dev"
 core = "7.x"
 project = "commerce_physical"
-datestamp = "1319371413"
+datestamp = "1477171444"
 
